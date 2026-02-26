@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Sessions ──────────────────────────────────────────
+    match /sessions/{sessionId} {
+      // Any authenticated user can read (followers join via shared link)
+      allow read: if request.auth != null;
+
+      // Only authenticated users can create; masterId must be their own UID
+      allow create: if request.auth != null
+        && request.resource.data.masterId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.keys().hasAll(['title', 'pointScale', 'isNumericScale', 'conferenceEnabled', 'masterId', 'status', 'createdAt']);
+
+      // Only the session master can update (e.g. end session)
+      allow update: if request.auth != null
+        && resource.data.masterId == request.auth.uid;
+
+      // No deletes
+      allow delete: if false;
+
+      // ── Stories ───────────────────────────────────────
+      match /stories/{storyId} {
+        // Any authenticated user can read stories
+        allow read: if request.auth != null;
+
+        // Only the session master can create or update stories
+        allow create, update: if request.auth != null
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.masterId == request.auth.uid;
+
+        // No deletes
+        allow delete: if false;
+
+        // ── Votes ─────────────────────────────────────
+        match /votes/{userId} {
+          // Any authenticated user can read votes (for result display)
+          allow read: if request.auth != null;
+
+          // Users can only write their own vote:
+          //   - document ID must match their UID
+          //   - userId field in payload must match their UID
+          allow create, update: if request.auth != null
+            && request.auth.uid == userId
+            && request.resource.data.userId == request.auth.uid;
+
+          // No deletes
+          allow delete: if false;
+        }
+      }
+
+      // ── Signaling (WebRTC conference) ─────────────────
+      match /signaling/{peerId} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null
+          && request.auth.uid == peerId;
+        allow delete: if request.auth != null
+          && request.auth.uid == peerId;
+      }
+
+      // ── Chat (ephemeral conference messages) ──────────
+      match /chat/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+  }
+}
