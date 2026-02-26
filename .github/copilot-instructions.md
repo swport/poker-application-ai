@@ -1,63 +1,60 @@
-
 # Copilot Instructions for Poker Planning MVP
 
-## Big Picture Architecture
-- **Frontend:** React (client-only, no SSR), MUI 5 for UI, Vite for build tooling. All rendering is client-side; no backend-for-frontend layer.
-- **Backend:** Firebase (Authentication via Email/OTP, Firestore for real-time session/story/vote sync, supporting services).
-- **Conference:** Optional WebRTC audio/video, enabled per session. Peer-limiting or SFU required for scalability.
+## Architecture Overview
+- **Frontend:** React 19, client-only (no SSR), MUI 7 (`@mui/material` ^7), Vite 7, TypeScript 5.9
+- **Backend:** Firebase 12 — Auth (Email/OTP passwordless), Firestore (real-time sync)
+- **Conference:** Optional WebRTC audio/video per session, full-mesh ≤8 peers
+- **Routing:** React Router v7 (`react-router-dom` ^7), `createBrowserRouter`
+- **Forms:** React Hook Form for validation
 
-## Major Components & Data Flow
-- **Session Lifecycle:**
-  - Poker master creates session (title, point scale, conference toggle).
-  - Followers join via shareable link (must authenticate).
-  - Stories are managed by master only (add/start/end).
-  - Voting is real-time, one vote per user per story, can change before timer ends.
-  - Session and story state sync via Firestore listeners.
-- **Voting:**
-  - Votes stored per story, per user. No vote = no estimate for that user.
-  - Aggregation avoids rewriting entire collections (see `docs/specs.md`).
-- **Conference:**
-  - WebRTC initialized only if enabled for session. Must handle peer scaling.
+## Project Structure
+```
+src/
+  components/       # Shared/presentational components (layout, ErrorBoundary, etc.)
+  features/         # Feature modules: auth/, dashboard/, session/, conference/
+  hooks/            # Shared custom hooks
+  lib/firebase.ts   # Single Firebase init — exports `auth`, `db`, default `app`
+  pages/            # Thin route-level page wrappers
+  theme/theme.ts    # MUI createTheme (primary #1976d2, Inter font, borderRadius 8)
+  types/index.ts    # All shared TypeScript interfaces (Session, Story, Vote, UserProfile)
+  utils/            # Pure utility functions
+```
+Feature modules are self-contained: each has its own components, hooks, and services. Import directly from files — no barrel `index.ts` re-exports (avoids circular deps).
+
+## Code Conventions
+- **Path alias:** Use `@/` for `src/` imports (configured in `vite.config.ts` and `tsconfig.app.json`)
+- **`verbatimModuleSyntax: true`** — always use `import type { X }` for type-only imports
+- **Components:** Function declarations with default export (not arrow functions or `React.FC`)
+- **Styling:** MUI `sx` prop and `styled()` — no CSS modules or external CSS for components
+- **Strict TS:** `noUnusedLocals`, `noUnusedParameters`, `erasableSyntaxOnly` enabled
+
+## Firestore Data Model
+```
+/sessions/{sessionId}              → Session (masterId, pointScale, status, ...)
+  /stories/{storyId}               → Story (title, status, timerStart, average)
+    /votes/{userId}                → Vote (value, displayName) — doc ID = userId (one vote per user)
+  /signaling/{userId}              → WebRTC signaling (conference only)
+  /chat/{messageId}                → Ephemeral chat messages (conference only)
+```
+Role detection is client-side: `session.masterId === user.uid` (no separate roles collection). Timer state derived from `story.timerStart` Timestamp — no server-side timer.
 
 ## Developer Workflows
-- **Build:**
-  - Use `npm run build` (runs `tsc -b` then `vite build`).
-- **Dev Server:**
-  - Use `npm run dev` for local development (Vite HMR).
-- **Lint:**
-  - Use `npm run lint` (ESLint, see `eslint.config.js`).
-- **Debug:**
-  - Use React DevTools and Firebase Emulator Suite for local development.
-- **Deploy:**
-  - Deploy via Firebase Hosting (if configured).
-- **Testing:**
-  - (No test scripts present; add if/when needed.)
+- `npm run dev` — Vite HMR dev server
+- `npm run build` — `tsc -b && vite build` (must pass with zero TS errors)
+- `npm run lint` — ESLint 9 flat config (`eslint.config.js`)
+- No test runner configured yet
 
-## Project-Specific Conventions
-- **Session isolation:** All Poker sessions are independent (no cross-session data leaks).
-- **Role-based actions:** Only master can start/end stories or sessions; followers can only vote.
-- **Minimal UI:** Prioritize UX and responsiveness over visual complexity (see `docs/design.md`).
-- **No persistent chat:** Chat is ephemeral, not stored long-term.
-- **No SSR:** All rendering is client-side.
-- **TypeScript strictness:** See `tsconfig.app.json` and `tsconfig.node.json` for strict settings and bundler mode.
-- **Linting:** ESLint config uses recommended, React Hooks, and Vite-specific rules. Expand with type-aware rules as needed (see `README.md`).
+## Key Design Rules
+- **Session isolation:** No cross-session data. All queries scoped to `sessionId`
+- **Master-only actions:** Only `masterId` can add/start/end stories, end session
+- **Timer:** Hardcoded 3 min (`TIMER_DURATION_SECONDS = 180` in `src/types/index.ts`). Master's client auto-ends story on expiry
+- **Vote reveal:** Automatic on story end (no manual reveal button)
+- **Average:** Only computed when `session.isNumericScale === true`; non-numeric scales show distribution only
 
-## Integration Points & Patterns
-- **Firebase:**
-  - Auth: Email/OTP only.
-  - Firestore: Real-time updates for sessions, stories, votes.
-  - Security: Enforce access rules (one vote per user per story, master-only actions).
-- **WebRTC:**
-  - Only initialized if conference is enabled for session.
-  - Must handle peer scaling (avoid mesh explosion).
-- **UI/UX:**
-  - See `docs/design.md` for layout, role-based views, and minimal design patterns.
+## Implementation Plan
+See `docs/implementation-plan.md` for the full PR-by-PR build plan (PR 01–12). Current state: PR 01 (foundation scaffold) is complete. Feature directories exist but contain only `.gitkeep` placeholders.
 
-## Examples & References
-- **Session logic:** See `docs/specs.md` for edge cases and acceptance criteria.
-- **UI/UX:** See `docs/design.md` for screen layouts and interaction patterns.
-- **Build/Lint:** See `package.json` scripts and `eslint.config.js` for commands and config.
-
----
-
-**Update this file if major architecture or workflow changes occur.**
+## Reference Docs
+- `docs/specs.md` — Functional requirements, edge cases, NFRs
+- `docs/design.md` — UI layouts, role-based views, screen flows
+- `.github/instructions/reactjs.instructions.md` — General React/TS best practices (applied automatically to source files)
