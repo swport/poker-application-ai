@@ -1,0 +1,8 @@
+/* Global resets handled by MUI CssBaseline — keep this file minimal */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
