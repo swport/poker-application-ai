@@ -80,13 +80,23 @@ function SessionPage() {
               overflow: 'hidden',
             }}
           >
-            <StoryList stories={stories} loading={storiesLoading} />
+            <StoryList
+              stories={stories}
+              loading={storiesLoading}
+              sessionId={session.id}
+              isMaster={isMaster}
+              isSessionEnded={session.status === 'ended'}
+            />
           </Paper>
         </Grid>
 
         {/* Center panel — Active Story */}
         <Grid size={{ xs: 12, md: session.conferenceEnabled ? 6 : 9 }}>
-          <ActiveStoryPanel activeStory={activeStory} />
+          <ActiveStoryPanel
+            activeStory={activeStory}
+            session={session}
+            isMaster={isMaster}
+          />
         </Grid>
 
         {/* Right panel — Conference (only when enabled) */}
